@@ -22,25 +22,30 @@ function isIgnorableSchemaError(e: unknown): boolean {
 
 function splitSqlStatements(sql: string): string[] {
   return sql
-    .split(/;\s*(?:\n|$)/)
+    .split(";")
     .map((s) => s.trim())
     .filter(Boolean)
     .map((s) => `${s};`);
 }
 
-async function execStatements(d1: D1Database, statements: string[]): Promise<void> {
-  for (const sql of statements) {
-    try {
-      await d1.exec(sql);
-    } catch (e) {
-      if (!isIgnorableSchemaError(e)) throw e;
-    }
+async function runStatement(d1: D1Database, sql: string): Promise<void> {
+  try {
+    await d1.prepare(sql).run();
+  } catch (e) {
+    if (!isIgnorableSchemaError(e)) throw e;
   }
 }
 
 async function ensureSchema(d1: D1Database): Promise<void> {
-  await execStatements(d1, splitSqlStatements(SCHEMA));
-  await execStatements(d1, MIGRATIONS);
+  console.log("D1 PATCH V3 ACTIVE");
+
+  for (const sql of splitSqlStatements(SCHEMA)) {
+    await runStatement(d1, sql);
+  }
+
+  for (const sql of MIGRATIONS) {
+    await runStatement(d1, sql);
+  }
 }
 
 export function createD1Db(binding: unknown): Db {
@@ -48,7 +53,7 @@ export function createD1Db(binding: unknown): Db {
 
   if (!_initPromise) {
     _initPromise = ensureSchema(d1).catch((e) => {
-      _initPromise = null; // allow retry on next request
+      _initPromise = null;
       throw e;
     });
   }
