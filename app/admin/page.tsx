@@ -15,6 +15,9 @@ import {
   Copy,
   Check,
   Key,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 
 interface Module {
@@ -68,6 +71,11 @@ export default function AdminPage() {
   const [replacingModuleId, setReplacingModuleId] = useState<string | null>(null);
   const [syncingModuleId, setSyncingModuleId] = useState<string | null>(null);
   const [syncingColId, setSyncingColId] = useState<string | null>(null);
+  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editIconUrl, setEditIconUrl] = useState("");
+  const [savingCollectionId, setSavingCollectionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/auth")
@@ -120,6 +128,53 @@ export default function AdminPage() {
       setPasswordError("网络错误");
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const startEditCollection = (col: Collection) => {
+    setEditingCollectionId(col.id);
+    setEditTitle(col.title || "");
+    setEditDescription(col.description || "");
+    setEditIconUrl(col.icon_url || "");
+  };
+
+  const cancelEditCollection = () => {
+    setEditingCollectionId(null);
+    setEditTitle("");
+    setEditDescription("");
+    setEditIconUrl("");
+  };
+
+  const handleSaveCollection = async (col: Collection) => {
+    if (!editTitle.trim()) {
+      alert("合集标题不能为空");
+      return;
+    }
+
+    setSavingCollectionId(col.id);
+    try {
+      const res = await fetch("/api/admin/collections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: col.id,
+          title: editTitle.trim(),
+          description: editDescription.trim(),
+          icon_url: editIconUrl.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "保存失败");
+      }
+
+      await fetchCollections();
+      cancelEditCollection();
+    } catch (e) {
+      alert(`保存失败: ${(e as Error).message}`);
+    } finally {
+      setSavingCollectionId(null);
     }
   };
 
@@ -318,7 +373,6 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-50 rounded-lg">
@@ -339,169 +393,234 @@ export default function AdminPage() {
           </a>
         </div>
 
-        {/* Loading */}
         {collectionsLoading && collections.length === 0 && (
           <div className="text-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
           </div>
         )}
 
-        {/* Empty */}
         {!collectionsLoading && collections.length === 0 && (
           <div className="text-center py-12 text-slate-400 text-sm">
             暂无合集
           </div>
         )}
 
-        {/* Collections */}
-        {collections.map((col) => (
-          <div
-            key={col.id}
-            className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
-          >
-            {/* Collection Header */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  {col.icon_url ? (
-                    <img
-                      src={col.icon_url}
-                      alt=""
-                      className="w-9 h-9 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <FileJson className="w-4.5 h-4.5 text-indigo-600" />
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-semibold text-slate-800">
-                      {col.title}
-                    </h3>
-                    {col.description && (
-                      <p className="text-xs text-slate-500">
-                        {col.description}
-                      </p>
-                    )}
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      ID: {col.id} · 用户: {col.user_id.slice(0, 8)}... ·
-                      更新于{" "}
-                      {new Date(col.updated_at * 1000).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md mr-1">
-                    {col.modules.length} 个模块
-                  </span>
-                  {col.source_url && (
-                    <button
-                      onClick={() => handleSyncCollection(col)}
-                      disabled={syncingColId === col.id}
-                      className="p-1.5 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="从源地址同步"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${syncingColId === col.id ? "animate-spin" : ""}`} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteCollection(col)}
-                    disabled={deletingId === col.id}
-                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                    title="删除合集"
-                  >
-                    {deletingId === col.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+        {collections.map((col) => {
+          const isEditing = editingCollectionId === col.id;
+          return (
+            <div
+              key={col.id}
+              className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {col.icon_url ? (
+                      <img
+                        src={col.icon_url}
+                        alt=""
+                        className="w-9 h-9 rounded-lg object-cover"
+                      />
                     ) : (
-                      <Trash2 className="w-4 h-4" />
+                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+                        <FileJson className="w-4.5 h-4.5 text-indigo-600" />
+                      </div>
                     )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* FWD URL */}
-            <div className="px-6 py-2 bg-indigo-50/40 border-b border-slate-100 flex items-center gap-2">
-              <Key className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-              <span className="text-xs text-indigo-600 font-medium flex-shrink-0">订阅链接</span>
-              <input type="text" readOnly value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/collections/${col.slug}/fwd`} className="bg-transparent text-xs font-mono text-indigo-500 flex-1 min-w-0 focus:outline-none truncate" />
-              <InlineCopy text={`${typeof window !== "undefined" ? window.location.origin : ""}/api/collections/${col.slug}/fwd`} title="复制订阅链接" />
-            </div>
-
-            {/* Modules */}
-            <div className="divide-y divide-slate-100">
-              {col.modules.map((mod) => (
-                <div
-                  key={mod.id}
-                  className="px-6 py-3 flex items-center gap-4 hover:bg-slate-50 transition-colors group"
-                >
-                  <div className="p-2 rounded-lg bg-amber-50 text-amber-600 flex-shrink-0">
-                    <FileCode className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm text-slate-800 truncate">
-                        {mod.title || mod.filename}
-                      </span>
-                      {mod.version && (
-                        <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                          {mod.version}
-                        </span>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-slate-800">
+                        {col.title}
+                      </h3>
+                      {col.description && (
+                        <p className="text-xs text-slate-500">
+                          {col.description}
+                        </p>
                       )}
-                      {mod.is_encrypted ? (
-                        <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">
-                          加密
-                        </span>
-                      ) : null}
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        ID: {col.id} · 用户: {col.user_id.slice(0, 8)}... · 更新于 {new Date(col.updated_at * 1000).toLocaleDateString()}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-400">
-                      {mod.filename} ·{" "}
-                      {mod.file_size < 1024
-                        ? `${mod.file_size} B`
-                        : `${(mod.file_size / 1024).toFixed(1)} KB`}
-                      {mod.author ? ` · ${mod.author}` : ""}
-                    </p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <InlineCopy text={`${typeof window !== "undefined" ? window.location.origin : ""}/api/modules/${mod.id}/raw`} title="复制模块链接" />
-                    <input type="file" accept=".js" className="hidden" id={`admin-replace-${mod.id}`} onChange={(e) => handleReplaceModule(mod, e)} />
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md mr-1">
+                      {col.modules.length} 个模块
+                    </span>
                     <button
-                      disabled={replacingModuleId === mod.id}
-                      onClick={() => document.getElementById(`admin-replace-${mod.id}`)?.click()}
-                      className="p-1.5 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="更新文件"
+                      onClick={() => isEditing ? cancelEditCollection() : startEditCollection(col)}
+                      className="p-1.5 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                      title={isEditing ? "取消编辑" : "编辑合集信息"}
                     >
-                      {replacingModuleId === mod.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                      {isEditing ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                     </button>
-                    {mod.source_url && (
+                    {col.source_url && (
                       <button
-                        disabled={syncingModuleId === mod.id}
-                        onClick={() => handleSyncModule(mod)}
+                        onClick={() => handleSyncCollection(col)}
+                        disabled={syncingColId === col.id}
                         className="p-1.5 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
                         title="从源地址同步"
                       >
-                        <RefreshCw className={`w-4 h-4 ${syncingModuleId === mod.id ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`w-4 h-4 ${syncingColId === col.id ? "animate-spin" : ""}`} />
                       </button>
                     )}
                     <button
-                      onClick={() => handleDeleteModule(col.id, mod)}
-                      disabled={deletingModuleId === mod.id}
+                      onClick={() => handleDeleteCollection(col)}
+                      disabled={deletingId === col.id}
                       className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="删除模块"
+                      title="删除合集"
                     >
-                      {deletingModuleId === mod.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      {deletingId === col.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
-              ))}
-              {col.modules.length === 0 && (
-                <div className="px-6 py-4 text-center text-sm text-slate-400">
-                  暂无模块
-                </div>
-              )}
+
+                {isEditing && (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-medium text-slate-500">合集标题</label>
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="请输入合集标题"
+                        />
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-medium text-slate-500">图标 URL</label>
+                        <input
+                          type="url"
+                          value={editIconUrl}
+                          onChange={(e) => setEditIconUrl(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="https://example.com/icon.png"
+                        />
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-medium text-slate-500">合集描述</label>
+                        <textarea
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          rows={3}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                          placeholder="可选"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-h-[48px]">
+                        {editIconUrl ? (
+                          <img src={editIconUrl} alt="图标预览" className="w-12 h-12 rounded-xl object-cover border" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 border flex items-center justify-center text-slate-400 text-xs">
+                            无图标
+                          </div>
+                        )}
+                        <span className="text-xs text-slate-400">修改后将同时影响管理页和前台合集页显示</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={cancelEditCollection}
+                          className="px-3 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={() => handleSaveCollection(col)}
+                          disabled={savingCollectionId === col.id}
+                          className="px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center gap-2"
+                        >
+                          {savingCollectionId === col.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          保存
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-2 bg-indigo-50/40 border-b border-slate-100 flex items-center gap-2">
+                <Key className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                <span className="text-xs text-indigo-600 font-medium flex-shrink-0">订阅链接</span>
+                <input type="text" readOnly value={`${typeof window !== "undefined" ? window.location.origin : ""}/api/collections/${col.slug}/fwd`} className="bg-transparent text-xs font-mono text-indigo-500 flex-1 min-w-0 focus:outline-none truncate" />
+                <InlineCopy text={`${typeof window !== "undefined" ? window.location.origin : ""}/api/collections/${col.slug}/fwd`} title="复制订阅链接" />
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {col.modules.map((mod) => (
+                  <div
+                    key={mod.id}
+                    className="px-6 py-3 flex items-center gap-4 hover:bg-slate-50 transition-colors group"
+                  >
+                    <div className="p-2 rounded-lg bg-amber-50 text-amber-600 flex-shrink-0">
+                      <FileCode className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-slate-800 truncate">
+                          {mod.title || mod.filename}
+                        </span>
+                        {mod.version && (
+                          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                            {mod.version}
+                          </span>
+                        )}
+                        {mod.is_encrypted ? (
+                          <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-100">
+                            加密
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {mod.filename} · {mod.file_size < 1024 ? `${mod.file_size} B` : `${(mod.file_size / 1024).toFixed(1)} KB`}
+                        {mod.author ? ` · ${mod.author}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <InlineCopy text={`${typeof window !== "undefined" ? window.location.origin : ""}/api/modules/${mod.id}/raw`} title="复制模块链接" />
+                      <input type="file" accept=".js" className="hidden" id={`admin-replace-${mod.id}`} onChange={(e) => handleReplaceModule(mod, e)} />
+                      <button
+                        disabled={replacingModuleId === mod.id}
+                        onClick={() => document.getElementById(`admin-replace-${mod.id}`)?.click()}
+                        className="p-1.5 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="更新文件"
+                      >
+                        {replacingModuleId === mod.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                      </button>
+                      {mod.source_url && (
+                        <button
+                          disabled={syncingModuleId === mod.id}
+                          onClick={() => handleSyncModule(mod)}
+                          className="p-1.5 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="从源地址同步"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${syncingModuleId === mod.id ? "animate-spin" : ""}`} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteModule(col.id, mod)}
+                        disabled={deletingModuleId === mod.id}
+                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="删除模块"
+                      >
+                        {deletingModuleId === mod.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {col.modules.length === 0 && (
+                  <div className="px-6 py-4 text-center text-sm text-slate-400">
+                    暂无模块
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
