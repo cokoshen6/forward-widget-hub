@@ -58,3 +58,45 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ collections: result });
 }
+
+export async function PATCH(request: NextRequest) {
+  const denied = await verifyAdmin(request);
+  if (denied) return denied;
+
+  const body = await request.json().catch(() => null) as {
+    id?: string;
+    title?: string;
+    description?: string;
+    icon_url?: string;
+  } | null;
+
+  const id = body?.id?.trim();
+  const title = body?.title?.trim();
+  const description = body?.description?.trim() ?? "";
+  const iconUrl = body?.icon_url?.trim() ?? "";
+
+  if (!id) {
+    return NextResponse.json({ error: "Missing collection id" }, { status: 400 });
+  }
+
+  if (!title) {
+    return NextResponse.json({ error: "Missing title" }, { status: 400 });
+  }
+
+  const db = await getBackendDb();
+  const existing = await db
+    .prepare("SELECT id FROM collections WHERE id = ?")
+    .get<{ id: string }>(id);
+
+  if (!existing) {
+    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  }
+
+  await db
+    .prepare(
+      "UPDATE collections SET title = ?, description = ?, icon_url = ?, updated_at = unixepoch() WHERE id = ?"
+    )
+    .run(title, description, iconUrl, id);
+
+  return NextResponse.json({ ok: true });
+}
