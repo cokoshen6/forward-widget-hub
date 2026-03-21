@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { APP_NAME } from "@/lib/constants";
 import { CopyButton } from "./copy-button";
+import { FileJson } from "lucide-react";
 
 interface Module {
   id: string; filename: string; title: string; description: string;
@@ -30,10 +31,23 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           <a href="/" className="text-sm text-muted-foreground hover:text-foreground">&larr; {APP_NAME}</a>
         </div>
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{collection.title}</h1>
-            {collection.description && <p className="mt-2 text-muted-foreground">{collection.description}</p>}
-            <p className="mt-1 text-sm text-muted-foreground">{modules.length} module(s)</p>
+          <div className="flex items-start gap-4">
+            {collection.icon_url ? (
+              <img
+                src={collection.icon_url}
+                alt=""
+                className="w-16 h-16 rounded-2xl object-cover border bg-muted"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center border">
+                <FileJson className="w-7 h-7 text-indigo-600" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">{collection.title}</h1>
+              {collection.description && <p className="mt-2 text-muted-foreground">{collection.description}</p>}
+              <p className="mt-1 text-sm text-muted-foreground">{modules.length} module(s)</p>
+            </div>
           </div>
 
           <div className="rounded-md bg-muted p-4 space-y-2">
