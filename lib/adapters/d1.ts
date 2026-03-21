@@ -15,20 +15,32 @@ interface D1Database {
 
 let _initPromise: Promise<void> | null = null;
 
-function isAlreadyExistsError(e: unknown): boolean {
+function isIgnorableSchemaError(e: unknown): boolean {
   const msg = String((e as { message?: string })?.message ?? e);
-  return /already exists/i.test(msg);
+  return /already exists|duplicate column name/i.test(msg);
+}
+
+function splitSqlStatements(sql: string): string[] {
+  return sql
+    .split(/;\s*(?:\n|$)/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => `${s};`);
+}
+
+async function execStatements(d1: D1Database, statements: string[]): Promise<void> {
+  for (const sql of statements) {
+    try {
+      await d1.exec(sql);
+    } catch (e) {
+      if (!isIgnorableSchemaError(e)) throw e;
+    }
+  }
 }
 
 async function ensureSchema(d1: D1Database): Promise<void> {
-  try { await d1.exec(SCHEMA); } catch (e) {
-    if (!isAlreadyExistsError(e)) throw e;
-  }
-  for (const sql of MIGRATIONS) {
-    try { await d1.exec(sql); } catch (e) {
-      if (!isAlreadyExistsError(e)) throw e;
-    }
-  }
+  await execStatements(d1, splitSqlStatements(SCHEMA));
+  await execStatements(d1, MIGRATIONS);
 }
 
 export function createD1Db(binding: unknown): Db {
